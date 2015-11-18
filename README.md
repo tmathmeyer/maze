@@ -6,6 +6,8 @@ Generate nice looking images with a random maze
 
 ##CLI opts
 Options
+
+
     -w, --width
     Sets the width of the png.
 
