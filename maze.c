@@ -1,3 +1,9 @@
+/*
+ * Copyright (C) 2015 Ted Meyer
+ *
+ * see LICENSING for details
+ *
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
