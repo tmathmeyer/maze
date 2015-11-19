@@ -14,6 +14,10 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#define USEGRADIENT
+#ifdef USEGRADIENT
+#include <math.h>
+#endif
 
 #define p(x, y) (pixles + (x) + ((y) * WIDTH))
 
@@ -126,7 +130,23 @@ int randdir(int x, int y) {
     }
     return 0;
 }
+#ifndef M_PI
+#define M_PI 3.1415926535
+#endif
 
+#ifdef USEGRADIENT
+//gradient code from http://www.iquilezles.org/www/articles/palettes/palettes.htm
+inline float gradient(float a, float b, float c, float d, float t){
+	float res = a + b* cos(2*M_PI*(c*t+d));
+	if(res > 1.0) res = 1.0;
+	else if (res < 0.0) res = 0.0;
+	return res;
+}
+float grada[3] = {0.5,0.5,0.5};
+float gradb[3] = {0.5,0.5,0.5};
+float gradc[3] = {10.0,10.0,10.0};
+float gradd[3] = {0.0,0.10,0.20};
+#endif
 void color(struct pixl *dest, struct pixl *src, int x, int y) {
     dest->r = (src->r+3.0/(WIDTH*HEIGHT));
     if (dest->r > 1) {
@@ -141,12 +161,16 @@ void color(struct pixl *dest, struct pixl *src, int x, int y) {
         dest->b = 0;
     }
 #ifdef FRAMEBUFFER
-    usleep(sleep_t);
+    if(sleep_t)usleep(sleep_t);
     long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8)
                   + (y+vinfo.yoffset) * finfo.line_length;
-    
+
     *((uint32_t*)(fbp + location))
+#ifdef USEGRADIENT
+        = pixel_color(gradient(grada[0], gradb[0], gradc[0], gradd[0], dest->r)*255, gradient(grada[1], gradb[1], gradc[1], gradd[1], dest->r)*255, gradient(grada[2], gradb[2], gradc[2], gradd[2], dest->r)*255, &vinfo);
+#else
         = pixel_color(dest->r*255, dest->g*255, dest->b*255, &vinfo);
+#endif
 #endif
 }
 
@@ -269,9 +293,9 @@ struct BMPHeader {
     int biSizeImage;      /* Image size, in bytes (0 if no compression) */
     int biXPelsPerMeter;  /* Resolution in pixels/meter of display device */
     int biYPelsPerMeter;  /* Resolution in pixels/meter of display device */
-    int biClrUsed;        /* Number of colors in the color table (if 0, use 
+    int biClrUsed;        /* Number of colors in the color table (if 0, use
                              maximum allowed by biBitCount) */
-    int biClrImportant;   /* Number of important colors.  If 0, all colors 
+    int biClrImportant;   /* Number of important colors.  If 0, all colors
                              are important */
 };
 
