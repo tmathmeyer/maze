@@ -138,7 +138,9 @@ int randdir(int x, int y) {
 //gradient code from http://www.iquilezles.org/www/articles/palettes/palettes.htm
 inline float gradient(float a, float b, float c, float d, float t){
 	float res = a + b* cos(2*M_PI*(c*t+d));
-	return res < 0.0 ? 0.0 : res;
+	if(res > 1.0) res = 1.0;
+	else if (res < 0.0) res = 0.0;
+	return res;
 }
 float grada[3] = {0.5,0.5,0.5};
 float gradb[3] = {0.5,0.5,0.5};
