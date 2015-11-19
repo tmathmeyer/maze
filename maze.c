@@ -40,24 +40,22 @@ struct fb_var_screeninfo vinfo;
 uint8_t *fbp = 0;
 
 int myrand(void){
-	if(randnum < 3){
-		randbuf = rand();
-		randnum = 32;
-	}
-	int ret = randbuf & 7;
-	randnum -= 3;
-	randbuf = randbuf >> 3;
-	return ret;
+    if(randnum < 3){
+        randbuf = rand();
+        randnum = 32;
+    }
+    int ret = randbuf & 7;
+    randnum -= 3;
+    randbuf = randbuf >> 3;
+    return ret;
 }
 
-inline uint32_t pixel_color(uint8_t r, uint8_t g, uint8_t b, struct fb_var_screeninfo *vinfo)
-{
-	return (r<<vinfo->red.offset) | (g<<vinfo->green.offset) | (b<<vinfo->blue.offset);
+inline uint32_t pixel_color(uint8_t r, uint8_t g, uint8_t b, struct fb_var_screeninfo *vinfo) {
+    return (r<<vinfo->red.offset) | (g<<vinfo->green.offset) | (b<<vinfo->blue.offset);
 }
 
 int randdir(int x, int y) {
     int i = rand();
-//	int i = myrand();
     int k[5] = {0};
     int ct = 0;
 
@@ -173,11 +171,9 @@ void mycolor(struct pixl *dest, struct pixl *src, int x, int y) {
     if (dest->b > 1) {
         dest->b = 0;
     }
-	int pixel = pixel_color(dest->r * 255, dest->g * 255, dest->b * 255, &vinfo);
-	long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8) + (y+vinfo.yoffset) * finfo.line_length;
-//	int col = *((uint32_t*)(fbp + location));
-//	if(!col)  *((uint32_t*)(fbp + location)) = pixel;
-	*((uint32_t*)(fbp + location)) = pixel;
+    int pixel = pixel_color(dest->r * 255, dest->g * 255, dest->b * 255, &vinfo);
+    long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8) + (y+vinfo.yoffset) * finfo.line_length;
+    *((uint32_t*)(fbp + location)) = pixel;
 }
 
 
@@ -201,24 +197,23 @@ int main(int argc, char **argv) {
             arg+=2;
         }
     }
-	fb_fd = open("/dev/fb0",O_RDWR);
-	//Get variable screen information
-	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
-	vinfo.grayscale=0;
-	vinfo.bits_per_pixel=32;
+    fb_fd = open("/dev/fb0",O_RDWR);
+    ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+    vinfo.grayscale=0;
+    vinfo.bits_per_pixel=32;
 
-	ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
-	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+    ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
+    ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
 
-	ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo);
-	long screensize = vinfo.yres_virtual * finfo.line_length;
-	WIDTH = vinfo.xres;
-	HEIGHT = vinfo.yres;
+    ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo);
+    long screensize = vinfo.yres_virtual * finfo.line_length;
+    WIDTH = vinfo.xres;
+    HEIGHT = vinfo.yres;
 
-	fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t)0);
+    fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t)0);
 
 done:
-	if(pixles) free(pixles); pixles = 0;
+    if(pixles) free(pixles); pixles = 0;
     pixles = calloc(sizeof(struct pixl), WIDTH*HEIGHT);
 
     int x = 0;
@@ -231,7 +226,7 @@ done:
 
     int write = 0;
     do {
-	if(sleepy++ % 100 == 0){usleep(10); sleepy = 1;}
+        if(sleepy++ % 100 == 0){usleep(10); sleepy = 1;}
         int z = randdir(x,y);
         if (z) {write++;}
         switch(z) {
@@ -265,16 +260,16 @@ done:
                 x++;
                 break;
             case 4: // go left
-            	mycolor(p(x-1,y), p(x,y), x-1, y);
+                mycolor(p(x-1,y), p(x,y), x-1, y);
                 p(x-1,y)->d = 2;
                 x--;
                 break;
         }
     }
     while(p(x,y)->d != 5);
-	goto done;
-//done:
-  //  write_bmp(filename, WIDTH, HEIGHT, pixles);
+    goto done;
+    //done:
+    //  write_bmp(filename, WIDTH, HEIGHT, pixles);
 }
 
 struct BMPHeader {
