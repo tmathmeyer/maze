@@ -7,7 +7,6 @@ Generate nice looking images with a random maze
 ##CLI opts
 Options
 
-
     -w, --width
     Sets the width of the png.
 
@@ -17,3 +16,8 @@ Options
     -o, --output
     Set the file name for the output.
 
+### Additional Options for mazefb
+
+    -t, --timeout
+    Set the speed for the framebuffer drawer.
+    Higher value = slower drawing
