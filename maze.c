@@ -5,9 +5,15 @@
  *
  */
 #include <stdlib.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <linux/fb.h>
+#include <stdint.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 int WIDTH = 1920;
 int HEIGHT = 1080;
@@ -19,13 +25,39 @@ struct pixl {
     char d;
 };
 
-struct pixl *pixles;
+struct pixl *pixles = 0;
 #define p(x, y) (pixles + (x) + ((y) * WIDTH))
 
 int write_bmp(const char *filename, int width, int height, struct pixl *rgb);
 
+int randbuf = 0;
+int randnum = 0;
+int fb_fd = 0;
+
+struct fb_fix_screeninfo finfo;
+struct fb_var_screeninfo vinfo;
+
+uint8_t *fbp = 0;
+
+int myrand(void){
+	if(randnum < 3){
+		randbuf = rand();
+		randnum = 32;
+	}
+	int ret = randbuf & 7;
+	randnum -= 3;
+	randbuf = randbuf >> 3;
+	return ret;
+}
+
+inline uint32_t pixel_color(uint8_t r, uint8_t g, uint8_t b, struct fb_var_screeninfo *vinfo)
+{
+	return (r<<vinfo->red.offset) | (g<<vinfo->green.offset) | (b<<vinfo->blue.offset);
+}
+
 int randdir(int x, int y) {
     int i = rand();
+//	int i = myrand();
     int k[5] = {0};
     int ct = 0;
 
@@ -109,6 +141,9 @@ int randdir(int x, int y) {
     return 0;
 }
 
+
+
+
 void color(struct pixl *dest, struct pixl *src) {
     dest->r = (src->r+3.0/(WIDTH*HEIGHT));
     if (dest->r > 1) {
@@ -122,9 +157,31 @@ void color(struct pixl *dest, struct pixl *src) {
     if (dest->b > 1) {
         dest->b = 0;
     }
+
+
+}
+void mycolor(struct pixl *dest, struct pixl *src, int x, int y) {
+    dest->r = (src->r+3.0/(WIDTH*HEIGHT));
+    if (dest->r > 1) {
+        dest->r = 0;
+    }
+    dest->g = (src->g+3.0/(WIDTH*HEIGHT));
+    if (dest->g > 1) {
+        dest->g = 0;
+    }
+    dest->b = (src->b+3.0/(WIDTH*HEIGHT));
+    if (dest->b > 1) {
+        dest->b = 0;
+    }
+	int pixel = pixel_color(dest->r * 255, dest->g * 255, dest->b * 255, &vinfo);
+	long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8) + (y+vinfo.yoffset) * finfo.line_length;
+//	int col = *((uint32_t*)(fbp + location));
+//	if(!col)  *((uint32_t*)(fbp + location)) = pixel;
+	*((uint32_t*)(fbp + location)) = pixel;
 }
 
 
+int sleepy = 0;
 int main(int argc, char **argv) {
     int arg = 1;
     srand(time(NULL));
@@ -144,6 +201,24 @@ int main(int argc, char **argv) {
             arg+=2;
         }
     }
+	fb_fd = open("/dev/fb0",O_RDWR);
+	//Get variable screen information
+	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+	vinfo.grayscale=0;
+	vinfo.bits_per_pixel=32;
+
+	ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
+	ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo);
+
+	ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo);
+	long screensize = vinfo.yres_virtual * finfo.line_length;
+	WIDTH = vinfo.xres;
+	HEIGHT = vinfo.yres;
+
+	fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t)0);
+
+done:
+	if(pixles) free(pixles); pixles = 0;
     pixles = calloc(sizeof(struct pixl), WIDTH*HEIGHT);
 
     int x = 0;
@@ -156,6 +231,7 @@ int main(int argc, char **argv) {
 
     int write = 0;
     do {
+	if(sleepy++ % 100 == 0){usleep(10); sleepy = 1;}
         int z = randdir(x,y);
         if (z) {write++;}
         switch(z) {
@@ -174,30 +250,31 @@ int main(int argc, char **argv) {
                 }
                 break;
             case 1: // go up
-                color(p(x,y-1), p(x,y));
+                mycolor(p(x,y-1), p(x,y), x, y-1);
                 p(x,y-1)->d = 3;
                 y--;
                 break;
             case 3: // go down
-                color(p(x,y+1), p(x,y));
+                mycolor(p(x,y+1), p(x,y), x, y+1);
                 p(x,y+1)->d = 1;
                 y++;
                 break;
             case 2: // go right
-                color(p(x+1,y), p(x,y));
+                mycolor(p(x+1,y), p(x,y), x+1, y);
                 p(x+1,y)->d = 4;
                 x++;
                 break;
             case 4: // go left
-                color(p(x-1,y), p(x,y));
+            	mycolor(p(x-1,y), p(x,y), x-1, y);
                 p(x-1,y)->d = 2;
                 x--;
                 break;
         }
     }
     while(p(x,y)->d != 5);
-done:
-    write_bmp(filename, WIDTH, HEIGHT, pixles);
+	goto done;
+//done:
+  //  write_bmp(filename, WIDTH, HEIGHT, pixles);
 }
 
 struct BMPHeader {
@@ -245,8 +322,8 @@ int write_bmp(const char *filename, int width, int height, struct pixl *rgb) {
     bmph.biSizeImage = bytesPerLine * height;
     bmph.biXPelsPerMeter = 0;
     bmph.biYPelsPerMeter = 0;
-    bmph.biClrUsed = 0;       
-    bmph.biClrImportant = 0; 
+    bmph.biClrUsed = 0;
+    bmph.biClrImportant = 0;
 
     file = fopen (filename, "wb");
     if (file == NULL) return(0);
