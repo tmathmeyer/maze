@@ -32,6 +32,7 @@ int write_bmp(const char *filename, int width, int height, struct pixl *rgb);
 
 #ifdef FRAMEBUFFER
 int fb_fd = 0;
+int sleep_t = 0;
 struct fb_fix_screeninfo finfo;
 struct fb_var_screeninfo vinfo;
 uint8_t *fbp = 0;
@@ -140,6 +141,7 @@ void color(struct pixl *dest, struct pixl *src, int x, int y) {
         dest->b = 0;
     }
 #ifdef FRAMEBUFFER
+    usleep(sleep_t);
     long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8)
                   + (y+vinfo.yoffset) * finfo.line_length;
     
@@ -166,6 +168,11 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[arg], "-o") || !strcmp(argv[arg], "--output")) {
             filename = argv[arg+1];
             arg+=2;
+#ifdef FRAMEBUFFER
+        } else if (!strcmp(argv[arg], "-t") || !strcmp(argv[arg], "--timeout")) {
+            sleep_t=atoi(argv[arg+1]);
+            arg+=2;
+#endif
         }
     }
 #ifdef FRAMEBUFFER
