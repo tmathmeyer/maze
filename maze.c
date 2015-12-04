@@ -14,8 +14,11 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <math.h>
 
-#define p(x, y) (pixles + (x) + ((y) * WIDTH))
+#define p(x, y) (pixels + (x) + ((y) * WIDTH))
+
+#define colormode 2
 
 struct pixl {
     float r;
@@ -24,11 +27,22 @@ struct pixl {
     char d;
 };
 
+struct rgb {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+};
+
 int WIDTH = 1920;
 int HEIGHT = 1080;
-struct pixl *pixles = 0;
+struct pixl *pixels = 0;
 
 int write_bmp(const char *filename, int width, int height, struct pixl *rgb);
+void rgb_create(double r, double g, double b, struct rgb *to);
+void rgb_from_hsl(double h, double s, double l, struct rgb *to);
+void rgb_from_hsl2(double h, double s, double l, struct rgb *to);
+void rgb_color(struct pixl *dest, struct pixl *src);
+void hsl_color(struct pixl *dest, struct pixl *src);
 
 #ifdef FRAMEBUFFER
 int fb_fd = 0;
@@ -41,6 +55,35 @@ inline uint32_t pixel_color(uint8_t r, uint8_t g, uint8_t b, struct fb_var_scree
     return (r<<vinfo->red.offset) | (g<<vinfo->green.offset) | (b<<vinfo->blue.offset);
 }
 #endif
+
+void mapcolor(struct pixl *from, struct rgb *to) {
+    switch(colormode) {
+        case 1: //rgb
+            rgb_create(from->r
+                      ,from->g
+                      ,from->b
+                      ,to);
+            break;
+        case 2: //hsl
+        rgb_from_hsl2(from->r
+                    ,from->g
+                    ,from->b
+                    ,to);
+        break;
+    }
+}
+
+void color(struct pixl *dest, struct pixl *src) {
+    switch(colormode) {
+        case 1: //rgb
+            rgb_color(dest, src);
+            break;
+        case 2:
+            hsl_color(dest, src);
+            break;
+    }
+}
+
 
 int randdir(int x, int y) {
     int i = rand();
@@ -127,7 +170,16 @@ int randdir(int x, int y) {
     return 0;
 }
 
-void color(struct pixl *dest, struct pixl *src, int x, int y) {
+void hsl_color(struct pixl *dest, struct pixl *src) {
+    dest->r = 0;
+    dest->g = 10;
+    dest->b = src->b+.002;
+    if (dest->b > 100) {
+        dest->b = 0;
+    }
+}
+
+void rgb_color(struct pixl *dest, struct pixl *src) {
     dest->r = (src->r+3.0/(WIDTH*HEIGHT));
     if (dest->r > 1) {
         dest->r = 0;
@@ -140,16 +192,21 @@ void color(struct pixl *dest, struct pixl *src, int x, int y) {
     if (dest->b > 1) {
         dest->b = 0;
     }
+}
+
 #ifdef FRAMEBUFFER
-    usleep(sleep_t);
+void framebuffer(int x, int y) {
+    struct rgb draw;
+    mapcolor(p(x,y), &draw);
+    if (sleep_t) {
+        usleep(sleep_t);
+    }
     long location = (x+vinfo.xoffset) * (vinfo.bits_per_pixel/8)
                   + (y+vinfo.yoffset) * finfo.line_length;
     
-    *((uint32_t*)(fbp + location))
-        = pixel_color(dest->r*255, dest->g*255, dest->b*255, &vinfo);
-#endif
+    *((uint32_t*)(fbp + location))=pixel_color(draw.r, draw.g, draw.b, &vinfo);
 }
-
+#endif
 
 int main(int argc, char **argv) {
     int arg = 1;
@@ -191,14 +248,14 @@ int main(int argc, char **argv) {
 
     fbp = mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, (off_t)0);
 done:
-    if(pixles) {
-        free(pixles);
+    if(pixels) {
+        free(pixels);
     }
 #endif
-    pixles = calloc(sizeof(struct pixl), WIDTH*HEIGHT);
+    pixels = calloc(sizeof(struct pixl), WIDTH*HEIGHT);
 
-    int x = 0;
-    int y = 0;
+    int x = rand() % WIDTH;
+    int y = rand() % HEIGHT;
 
     p(x,y)->r = (float)rand()/(float)(RAND_MAX)/1.2;
     p(x,y)->g = (float)rand()/(float)(RAND_MAX)/1.2;
@@ -225,24 +282,36 @@ done:
                 }
                 break;
             case 1: // go up
-                color(p(x,y-1), p(x,y), x, y-1);
-                p(x,y-1)->d = 3;
+                color(p(x,y-1), p(x,y));
                 y--;
+                p(x,y)->d = 3;
+#ifdef FRAMEBUFFER
+                framebuffer(x, y);
+#endif
                 break;
             case 3: // go down
-                color(p(x,y+1), p(x,y), x, y+1);
-                p(x,y+1)->d = 1;
+                color(p(x,y+1), p(x,y));
                 y++;
+                p(x,y)->d = 1;
+#ifdef FRAMEBUFFER
+                framebuffer(x, y);
+#endif
                 break;
             case 2: // go right
-                color(p(x+1,y), p(x,y), x+1, y);
-                p(x+1,y)->d = 4;
+                color(p(x+1,y), p(x,y));
                 x++;
+                p(x,y)->d = 4;
+#ifdef FRAMEBUFFER
+                framebuffer(x, y);
+#endif
                 break;
             case 4: // go left
-                color(p(x-1,y), p(x,y), x-1, y);
-                p(x-1,y)->d = 2;
+                color(p(x-1,y), p(x,y));
                 x--;
+                p(x,y)->d = 2;
+#ifdef FRAMEBUFFER
+                framebuffer(x, y);
+#endif
                 break;
         }
     }
@@ -250,7 +319,7 @@ done:
     goto done;
 #ifndef FRAMEBUFFER
 done:
-      write_bmp(filename, WIDTH, HEIGHT, pixles);
+      write_bmp(filename, WIDTH, HEIGHT, pixels);
 #endif
 }
 
@@ -328,19 +397,103 @@ int write_bmp(const char *filename, int width, int height, struct pixl *rgb) {
         return(0);
     }
 
+    struct rgb cur;
+
     for (i = height - 1; i >= 0; i--) {
         for (j = 0; j < width; j++) {
             ipos = (width * i + j);
-            line[3*j] = rgb[ipos].b * 255;
-            line[3*j+1] = rgb[ipos].g * 255;
-            line[3*j+2] = rgb[ipos].r * 255;
+            mapcolor(&(rgb[ipos]), &cur);
+            line[3*j+0] = cur.b;
+            line[3*j+1] = cur.g;
+            line[3*j+2] = cur.r;
         }
         fwrite(line, bytesPerLine, 1, file);
     }
 
-    //free(line);
     fclose(file);
 
     return(1);
 }
 #endif
+
+#define HUE_UPPER_LIMIT 360.0
+
+void rgb_create(double r, double g, double b, struct rgb *to) {
+    to->r = 255*r;
+    to->g = 255*g;
+    to->b = 255*b;
+}
+
+void rgb_from_hsl(double h, double s, double l, struct rgb *to) {
+    double c = 0.0, m = 0.0, x = 0.0;
+    c = (1.0 - fabsf(2 * l - 1.0)) * s;
+    m = 1.0 * (l - 0.5 * c);
+    x = c * (1.0 - fabs(fmod(h / 60.0, 2) - 1.0));
+    if (h >= 0.0 && h < (HUE_UPPER_LIMIT / 6.0)) {
+        rgb_create(c + m, x + m, m, to);
+    }
+    else if (h >= (HUE_UPPER_LIMIT / 6.0) && h < (HUE_UPPER_LIMIT / 3.0)) {
+        rgb_create(x + m, c + m, m, to);
+    }
+    else if (h < (HUE_UPPER_LIMIT / 3.0) && h < (HUE_UPPER_LIMIT / 2.0)) {
+        rgb_create(m, c + m, x + m, to);
+    }
+    else if (h >= (HUE_UPPER_LIMIT / 2.0)
+            && h < (2.0f * HUE_UPPER_LIMIT / 3.0)) {
+        rgb_create(m, x + m, c + m, to);
+    }
+    else if (h >= (2.0 * HUE_UPPER_LIMIT / 3.0)
+            && h < (5.0 * HUE_UPPER_LIMIT / 6.0)) {
+        rgb_create(x + m, m, c + m, to);
+    }
+    else if (h >= (5.0 * HUE_UPPER_LIMIT / 6.0) && h < HUE_UPPER_LIMIT) {
+        rgb_create(c + m, m, x + m, to);
+    }
+    else {
+        rgb_create(m, m, m, to);
+    }
+}
+
+float h2rgb(float p, float q, float h) {
+    if (h<0) {
+        h+=1;
+    }
+    if (h>1) {
+        h -= 1;
+    }
+    if (6 * h < 1){
+        return p + ((q - p) * 6 * h);
+    }
+    if (2 * h < 1 ){
+        return  q;
+    }
+    if (3 * h < 2){
+        return p + ( (q - p) * 6 * ((2.0f / 3.0f) - h) );
+    }
+    return p;
+}
+
+void rgb_from_hsl2(double h, double s, double l, struct rgb *to) {
+    h /= 360.0;
+    s /= 100.0;
+    l /= 100.0;
+
+    float q = 0;
+
+    if (l < 0.5)
+        q = l * (1 + s);
+    else
+        q = (l + s) - (s * l);
+
+    float p = 2 * l - q;
+
+    float r = fmaxf(0, h2rgb(p, q, h + (1.0f / 3.0f)));
+    float g = fmaxf(0, h2rgb(p, q, h));
+    float b = fmaxf(0, h2rgb(p, q, h - (1.0f / 3.0f)));
+
+    r = fminf(r, 1.0f);
+    g = fminf(g, 1.0f);
+    b = fminf(b, 1.0f);
+
+    rgb_create(r, g, b, to);
+}
