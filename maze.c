@@ -236,8 +236,7 @@ inline void framebuffer(int x, int y) {
 #endif
 
 int main(int argc, char **argv) {
-    printcolor(from_hex("#70e1f5"));
-    grad = triple_gradient(1000, "#9D50BB", "#B3FFAB", "#4B1248");
+    grad = triple_gradient(60000, "#9D50BB", "#B3FFAB", "#4B1248");
     //grad = triple_gradient(100000, "#70e1f5", "#ffd194", "#FF6B6B");
     //grad = hex_gradient(100000, "#000000", "#ffffff");
     int arg = 1;
@@ -251,6 +250,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[arg], "-h") || !strcmp(argv[arg], "--height")) {
             HEIGHT=atoi(argv[arg+1]);
             arg+=2;
+        } else if (!strcmp(argv[arg], "-c") || !strcmp(argv[arg], "--colors")) {
+            grad = triple_gradient(atoi(argv[arg+1]), argv[arg+2], argv[arg+3], argv[arg+4]);
+            arg+=5;
         } else if (!strcmp(argv[arg], "-s") || !strcmp(argv[arg], "--seed")) {
             srand(atoi(argv[arg+1]));
             arg+=2;
