@@ -16,11 +16,14 @@
 #include <unistd.h>
 #include <math.h>
 
+#include "gradient.h"
+
 #define p(x, y) (pixels + (x) + ((y) * WIDTH))
 
-#define colormode 2
+#define colormode 3
 
 struct pixl {
+    size_t c;
     float r;
     float g;
     float b;
@@ -33,14 +36,17 @@ struct rgb {
 	unsigned char b;
 };
 
+int seed;
 int WIDTH = 1920;
 int HEIGHT = 1080;
 struct pixl *pixels = 0;
 
 int write_bmp(const char *filename, int width, int height, struct pixl *rgb);
 void rgb_create(double r, double g, double b, struct rgb *to);
+void realrgb(double r, double g, double b, struct rgb *to);
 void rgb_from_hsl(double h, double s, double l, struct rgb *to);
 void rgb_from_hsl2(double h, double s, double l, struct rgb *to);
+void gradient_color(struct pixl *dest, struct pixl *src);
 void rgb_color(struct pixl *dest, struct pixl *src);
 void hsl_color(struct pixl *dest, struct pixl *src);
 
@@ -56,13 +62,19 @@ inline uint32_t pixel_color(uint8_t r, uint8_t g, uint8_t b, struct fb_var_scree
 }
 #endif
 
-void mapcolor(struct pixl *from, struct rgb *to) {
+inline void mapcolor(struct pixl *from, struct rgb *to) {
     switch(colormode) {
-        case 1: //rgb
+        case 1://rgb
             rgb_create(from->r
                       ,from->g
                       ,from->b
                       ,to);
+            break;
+        case 3:
+            realrgb(from->r
+                   ,from->g
+                   ,from->b
+                   ,to);
             break;
         case 2: //hsl
         rgb_from_hsl2(from->r
@@ -73,7 +85,7 @@ void mapcolor(struct pixl *from, struct rgb *to) {
     }
 }
 
-void color(struct pixl *dest, struct pixl *src) {
+inline void color(struct pixl *dest, struct pixl *src) {
     switch(colormode) {
         case 1: //rgb
             rgb_color(dest, src);
@@ -81,12 +93,19 @@ void color(struct pixl *dest, struct pixl *src) {
         case 2:
             hsl_color(dest, src);
             break;
+        case 3:
+            gradient_color(dest, src);
+            break;
     }
 }
 
 
-int randdir(int x, int y) {
-    int i = rand();
+inline int randdir(int x, int y) {
+    if (seed == 0) {
+        seed = rand();
+    }
+    int i = seed;
+    seed >>= 2;
     int k[5] = {0};
     int ct = 0;
 
@@ -170,7 +189,15 @@ int randdir(int x, int y) {
     return 0;
 }
 
-void hsl_color(struct pixl *dest, struct pixl *src) {
+gradient *grad;
+inline void gradient_color(struct pixl *dest, struct pixl *src) {
+    dest->c = (src->c+1) % (grad->size);
+    dest->r = (grad->colors)[dest->c].r;
+    dest->g = (grad->colors)[dest->c].g;
+    dest->b = (grad->colors)[dest->c].b;
+}
+
+inline void hsl_color(struct pixl *dest, struct pixl *src) {
     dest->r = 0;
     dest->g = 10;
     dest->b = src->b+.002;
@@ -179,7 +206,7 @@ void hsl_color(struct pixl *dest, struct pixl *src) {
     }
 }
 
-void rgb_color(struct pixl *dest, struct pixl *src) {
+inline void rgb_color(struct pixl *dest, struct pixl *src) {
     dest->r = (src->r+3.0/(WIDTH*HEIGHT));
     if (dest->r > 1) {
         dest->r = 0;
@@ -195,7 +222,7 @@ void rgb_color(struct pixl *dest, struct pixl *src) {
 }
 
 #ifdef FRAMEBUFFER
-void framebuffer(int x, int y) {
+inline void framebuffer(int x, int y) {
     struct rgb draw;
     mapcolor(p(x,y), &draw);
     if (sleep_t) {
@@ -209,8 +236,13 @@ void framebuffer(int x, int y) {
 #endif
 
 int main(int argc, char **argv) {
+    printcolor(from_hex("#70e1f5"));
+    grad = triple_gradient(1000, "#9D50BB", "#B3FFAB", "#4B1248");
+    //grad = triple_gradient(100000, "#70e1f5", "#ffd194", "#FF6B6B");
+    //grad = hex_gradient(100000, "#000000", "#ffffff");
     int arg = 1;
     srand(time(NULL));
+    seed = rand();
     char *filename = "generated.bmp";
     while(arg < argc) {
         if (!strcmp(argv[arg], "-w") || !strcmp(argv[arg], "--width")) {
@@ -418,13 +450,19 @@ int write_bmp(const char *filename, int width, int height, struct pixl *rgb) {
 
 #define HUE_UPPER_LIMIT 360.0
 
-void rgb_create(double r, double g, double b, struct rgb *to) {
+inline void rgb_create(double r, double g, double b, struct rgb *to) {
     to->r = 255*r;
     to->g = 255*g;
     to->b = 255*b;
 }
 
-void rgb_from_hsl(double h, double s, double l, struct rgb *to) {
+inline void realrgb(double r, double g, double b, struct rgb *to) {
+    to->r = r;
+    to->g = g;
+    to->b = b;
+}
+
+inline void rgb_from_hsl(double h, double s, double l, struct rgb *to) {
     double c = 0.0, m = 0.0, x = 0.0;
     c = (1.0 - fabsf(2 * l - 1.0)) * s;
     m = 1.0 * (l - 0.5 * c);
@@ -454,7 +492,7 @@ void rgb_from_hsl(double h, double s, double l, struct rgb *to) {
     }
 }
 
-float h2rgb(float p, float q, float h) {
+inline float h2rgb(float p, float q, float h) {
     if (h<0) {
         h+=1;
     }
@@ -473,7 +511,7 @@ float h2rgb(float p, float q, float h) {
     return p;
 }
 
-void rgb_from_hsl2(double h, double s, double l, struct rgb *to) {
+inline void rgb_from_hsl2(double h, double s, double l, struct rgb *to) {
     h /= 360.0;
     s /= 100.0;
     l /= 100.0;
